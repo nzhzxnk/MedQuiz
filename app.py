@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # ここで CORS を有効にする
+CORS(app, origins=["https://89t948.csb.app"])
 
 # SQLAlchemy の初期化とモデルの定義を先に行う
 from flask_sqlalchemy import SQLAlchemy
@@ -45,12 +45,14 @@ def get_history(user_id):
         })
     return jsonify(history), 200
 
-@app.route('/api/data', methods=['POST'])
-def process_data():
-    data = request.get_json()  # クライアントから送られてきた JSON を取得
-    # ここで受け取ったデータに対する処理を実施（必要に応じてDBへの保存など）
-    processed = data  # この例では単にそのまま返すだけ
-    return jsonify({'received': processed}), 200
+@app.route('/api/results', methods=['POST'])
+def save_results():
+    data = request.get_json()  # フロントエンドから送られてきた JSON を取得
+    # ここで、受け取ったデータの処理（例：データベースに保存）を実施
+    # 今回はとりあえず受け取ったデータをコンソールに出力して確認する
+    print("Received quiz results:", data)
+    # 正常に処理できたなら 200 を返す
+    return jsonify({'message': 'Results saved successfully.'}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)
