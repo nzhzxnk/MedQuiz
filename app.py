@@ -51,6 +51,7 @@ def save_results():
     # ここで、受け取ったデータの処理（例：データベースに保存）を実施
     # 今回はとりあえず受け取ったデータをコンソールに出力して確認する
     print("Received quiz results:", data)
+    db.session.commit()
     # 正常に処理できたなら 200 を返す
     return jsonify({'message': 'Results saved successfully.'}), 200
 
