@@ -15,45 +15,74 @@ db = SQLAlchemy(app)
 
 class QuizResult(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    # ユーザーごとに識別する。ここでは表示名や uid などを利用できます。
     user_id = db.Column(db.String(64), nullable=False)
-    quiz_id = db.Column(db.String(64), nullable=False)
+    # 問題ID
     question_id = db.Column(db.String(64), nullable=False)
-    question = db.Column(db.Text)
-    user_answer = db.Column(db.Text)
-    correct_answer = db.Column(db.Text)
-    is_correct = db.Column(db.Boolean)
-    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    # 回答結果: Trueなら正解、Falseなら不正解
+    is_correct = db.Column(db.Boolean, nullable=False)
+    # 最新の回答日時。自動で設定されるデフォルト値も利用可能
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
-# 必要なら、データベースのテーブルを作成
+    def serialize(self):
+        return {
+            "question_id": self.question_id,
+            "is_correct": self.is_correct,
+            "timestamp": self.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+# （必要なら最初にテーブルを作成）
 with app.app_context():
     db.create_all()
 
-# エンドポイントの定義
+# 結果を保存するエンドポイント（POST）
+@app.route('/api/results', methods=['POST'])
+def save_results():
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    user_id = data.get('user_id')
+    results = data.get('results')  # results は各問題の結果を含むリストを想定
+
+    if not user_id or not results:
+        return jsonify({'error': 'Invalid data'}), 400
+
+    # 各問題の結果を処理します
+    for result in results:
+        question_id = result.get('question_id')
+        is_correct = result.get('is_correct')
+        timestamp_str = result.get('timestamp')
+        # timestamp を文字列から datetime に変換
+        new_timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+        
+        # すでにこのユーザー、問題に対する記録があるか検索
+        existing = QuizResult.query.filter_by(user_id=user_id, question_id=question_id).first()
+        if existing:
+            # 新しいタイムスタンプの方が後なら更新
+            if new_timestamp > existing.timestamp:
+                existing.is_correct = is_correct
+                existing.timestamp = new_timestamp
+        else:
+            new_result = QuizResult(
+                user_id=user_id,
+                question_id=question_id,
+                is_correct=is_correct,
+                timestamp=new_timestamp
+            )
+            db.session.add(new_result)
+    db.session.commit()
+    return jsonify({'message': 'Results saved successfully.'}), 200
+
+# 履歴取得用のエンドポイント（GET）
 @app.route('/api/history/<user_id>', methods=['GET'])
 def get_history(user_id):
     results = QuizResult.query.filter_by(user_id=user_id).order_by(QuizResult.timestamp.desc()).all()
-    history = []
-    for r in results:
-        history.append({
-            'quiz_id': r.quiz_id,
-            'question_id': r.question_id,
-            'question': r.question,
-            'user_answer': r.user_answer,
-            'correct_answer': r.correct_answer,
-            'is_correct': r.is_correct,
-            'timestamp': r.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-        })
+    # serialize() メソッドを使って各レコードを辞書に変換
+    history = [r.serialize() for r in results]
     return jsonify(history), 200
 
-@app.route('/api/results', methods=['POST'])
-def save_results():
-    data = request.get_json()  # フロントエンドから送られてきた JSON を取得
-    # ここで、受け取ったデータの処理（例：データベースに保存）を実施
-    # 今回はとりあえず受け取ったデータをコンソールに出力して確認する
-    print("Received quiz results:", data)
-    db.session.commit()
-    # 正常に処理できたなら 200 を返す
-    return jsonify({'message': 'Results saved successfully.'}), 200
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    import os
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, debug=True)
