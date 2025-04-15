@@ -18,6 +18,7 @@ class QuizResult(db.Model):
     # ユーザーごとに識別する。ここでは表示名や uid などを利用できます。
     user_id = db.Column(db.String(64), nullable=False)
     # 問題ID
+    quiz_id = db.Column(db.String(64), nullable=False)  # 
     question_id = db.Column(db.String(64), nullable=False)
     # 回答結果: Trueなら正解、Falseなら不正解
     is_correct = db.Column(db.Boolean, nullable=False)
