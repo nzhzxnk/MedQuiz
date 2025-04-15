@@ -35,44 +35,54 @@ class QuizResult(db.Model):
 with app.app_context():
     db.create_all()
 
-# 結果を保存するエンドポイント（POST）
 @app.route('/api/results', methods=['POST'])
 def save_results():
-    data = request.get_json()
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
+    try:
+        data = request.get_json()
+        print("Received quiz results:", data)  # デバッグ用ログ出力
+        user_id = data.get('user_id')
+        quiz_id = data.get('quiz_id')
+        results = data.get('results', [])
 
-    user_id = data.get('user_id')
-    results = data.get('results')  # results は各問題の結果を含むリストを想定
+        # 必須項目がない場合はエラーを返す
+        if not user_id or not quiz_id or not results:
+            return jsonify({'error': 'Invalid data'}), 400
 
-    if not user_id or not results:
-        return jsonify({'error': 'Invalid data'}), 400
+        # 各問題の結果を処理します
+        for result in results:
+            question_id = result.get('question_id')
+            is_correct = result.get('is_correct')
+            timestamp_str = result.get('timestamp')
+            # timestamp を文字列から datetime に変換
+            new_timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
 
-    # 各問題の結果を処理します
-    for result in results:
-        question_id = result.get('question_id')
-        is_correct = result.get('is_correct')
-        timestamp_str = result.get('timestamp')
-        # timestamp を文字列から datetime に変換
-        new_timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-        
-        # すでにこのユーザー、問題に対する記録があるか検索
-        existing = QuizResult.query.filter_by(user_id=user_id, question_id=question_id).first()
-        if existing:
-            # 新しいタイムスタンプの方が後なら更新
-            if new_timestamp > existing.timestamp:
-                existing.is_correct = is_correct
-                existing.timestamp = new_timestamp
-        else:
-            new_result = QuizResult(
+            # すでにこのユーザー、quiz_id、かつこの問題に対する記録があるか検索
+            existing = QuizResult.query.filter_by(
                 user_id=user_id,
-                question_id=question_id,
-                is_correct=is_correct,
-                timestamp=new_timestamp
-            )
-            db.session.add(new_result)
-    db.session.commit()
-    return jsonify({'message': 'Results saved successfully.'}), 200
+                quiz_id=quiz_id,
+                question_id=question_id
+            ).first()
+
+            if existing:
+                # 新しいタイムスタンプの方が後なら更新
+                if new_timestamp > existing.timestamp:
+                    existing.is_correct = is_correct
+                    existing.timestamp = new_timestamp
+            else:
+                new_result = QuizResult(
+                    user_id=user_id,
+                    quiz_id=quiz_id,
+                    question_id=question_id,
+                    is_correct=is_correct,
+                    timestamp=new_timestamp
+                )
+                db.session.add(new_result)
+        db.session.commit()
+        return jsonify({'message': 'Results saved successfully.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        print("Error in save_results:", str(e))
+        return jsonify({'error': str(e)}), 500
 
 # 履歴取得用のエンドポイント（GET）
 @app.route('/api/history/<user_id>', methods=['GET'])
